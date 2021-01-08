@@ -30,6 +30,7 @@ import org.dspace.app.xmlui.wing.element.Text;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.factory.AuthorizeServiceFactory;
 import org.dspace.authorize.service.AuthorizeService;
+import org.dspace.core.ConfigurationManager;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
@@ -145,6 +146,9 @@ public class EditEPersonForm extends AbstractDSpaceTransformer
     private static final Message T_telephone =
     	message("xmlui.EPerson.EditProfile.telephone");
     
+    // netid allows to handle automatic Single Sign-On login (CAS)
+    private static final Message T_netid =
+        message("xmlui.EPerson.EditProfile.netid");
 
 	protected AuthorizeService authorizeService = AuthorizeServiceFactory.getInstance().getAuthorizeService();
 	protected EPersonService ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
@@ -191,6 +195,8 @@ public class EditEPersonForm extends AbstractDSpaceTransformer
 		String firstValue = eperson.getFirstName();
 		String lastValue  = eperson.getLastName();
 		String phoneValue = ePersonService.getMetadata(eperson, "phone");
+        // netid allows to handle automatic Single Sign-On login (CAS
+        String netidValue = eperson.getNetid();
 		boolean canLogInValue = eperson.canLogIn();
 		boolean certificatValue = eperson.getRequireCertificate();
 		java.util.List<String> deleteConstraints = ePersonService.getDeleteConstraints(context, eperson);
@@ -211,9 +217,12 @@ public class EditEPersonForm extends AbstractDSpaceTransformer
         {
             phoneValue = request.getParameter("phone");
         }
-		
-		
-		
+        if (request.getParameter("netid") != null)
+        {
+            netidValue = request.getParameter("netid");
+        }
+
+
 		// DIVISION: eperson-edit
 	    Division edit = body.addInteractiveDivision("eperson-edit",contextPath+"/admin/epeople",Division.METHOD_POST,"primary administrative eperson");
 	    edit.setHead(T_head1);
@@ -281,6 +290,21 @@ public class EditEPersonForm extends AbstractDSpaceTransformer
         {
         	identity.addLabel(T_last_name);
         	identity.addItem(lastValue);
+        }
+
+        if ("true".equals(ConfigurationManager.getProperty("webui.cas.enable")))
+        {
+            if (admin)
+            {
+                Text netid = identity.addItem().addText("netid");
+                netid.setLabel(T_netid);
+                netid.setValue(netidValue);
+            }
+            else
+            {
+                identity.addLabel(T_netid);
+                identity.addItem(netidValue);
+            }
         }
         
         if (admin)

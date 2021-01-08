@@ -21,6 +21,7 @@ import org.apache.cocoon.environment.Request;
 import org.apache.cocoon.environment.http.HttpEnvironment;
 import org.apache.commons.lang.StringUtils;
 import org.dspace.app.xmlui.utils.AuthenticationUtil;
+import org.dspace.core.ConfigurationManager;
 import org.dspace.app.xmlui.wing.Message;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.core.Context;
@@ -81,6 +82,8 @@ public class FlowEPersonUtils {
 		String first = request.getParameter("first_name").trim();
 		String last  = request.getParameter("last_name").trim();
 		String phone = request.getParameter("phone").trim();
+		// Single Sign-On
+		String netid = request.getParameter("netid");
 		boolean login = (request.getParameter("can_log_in") != null) ? true : false;
 		boolean certificate = (request.getParameter("certificate") != null) ? true : false;
 		
@@ -106,7 +109,18 @@ public class FlowEPersonUtils {
     		// special error that the front end knows about.
     		result.addError("eperson_email_key");
     	}
-		
+
+        // Check if the netid is already being used
+	    if ("true".equals(ConfigurationManager.getProperty("webui.cas.enable")))
+        {
+            potentialDupicate = ePersonService.findByNetid(context, netid);
+            if (potentialDupicate != null)
+            {
+                // special error that the front end knows about.
+                result.addError("eperson_netid_key");
+                }
+        }
+
 	    // No errors, so we try to create the EPerson from the data provided
 	    if (result.getErrors() == null)
 	    {
@@ -115,6 +129,7 @@ public class FlowEPersonUtils {
     		newPerson.setFirstName(context, first);
             newPerson.setLastName(context, last);
             ePersonService.setMetadata(context, newPerson, "phone", phone);
+            newPerson.setNetid(netid);
             newPerson.setCanLogIn(login);
             newPerson.setRequireCertificate(certificate);
             newPerson.setSelfRegistered(false);
@@ -157,6 +172,8 @@ public class FlowEPersonUtils {
 		String first = request.getParameter("first_name");
 		String last  = request.getParameter("last_name");
 		String phone = request.getParameter("phone");
+		// Single Sign-On
+		String netid=request.getParameter("netid");
 		boolean login = (request.getParameter("can_log_in") != null) ? true : false;
 		boolean certificate = (request.getParameter("certificate") != null) ? true : false;
 		
@@ -199,6 +216,23 @@ public class FlowEPersonUtils {
         			return result;
         		}
         	}
+
+            // check if the netid is already being used
+            if ("true".equals(ConfigurationManager.getProperty("webui.cas.enable")))
+            {
+                EPerson potentialDupicate = ePersonService.findByNetid(context, netid);
+                if (potentialDupicate == null)
+                {
+                    personModified.setNetid(netid);
+                }
+                else if (!potentialDupicate.equals(personModified))
+                {
+                    // set a special field in error so that the transformer can display a pretty error.
+                    result.addError("eperson_netid_key");
+                    return result;
+                }
+            }
+
         	String originalFirstName = personModified.getFirstName();
             if (originalFirstName == null || !originalFirstName.equals(first)) {
         		personModified.setFirstName(context, first);
