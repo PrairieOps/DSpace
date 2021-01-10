@@ -382,20 +382,26 @@ public class CASAuthentication
                             HttpServletRequest request,
                             HttpServletResponse response)
     {
-       // Determine CAS server URL
-       final String authServer = ConfigurationManager.getProperty("authentication-cas", "cas.server.url");
-       StringBuffer url=new StringBuffer(authServer);
-       url.append("?service=").append(request.getScheme()).
-       append("://").append(request.getServerName());
-       //Add the URL callback
-       if(request.getServerPort()!=80)
-         url.append(":").append(request.getServerPort());
-       url.append(request.getContextPath()).append("/cas-login");
-       log.info("CAS server and service:  " + authServer);
-       //System.out.println(url);
-       
-       // Redirect to CAS server
-       return response.encodeRedirectURL(url.toString());
+       boolean webuiCasEnable = ConfigurationManager.getBooleanProperty("authentication-cas", "webui.cas.enable", false);
+       if (webuiCasEnable)
+       {
+           // Determine CAS server URL
+           final String authServer = ConfigurationManager.getProperty("authentication-cas", "cas.server.url");
+           StringBuffer url=new StringBuffer(authServer);
+           url.append("?service=").append(request.getScheme()).
+           append("://").append(request.getServerName());
+           //Add the URL callback
+           if(request.getServerPort()!=80)
+             url.append(":").append(request.getServerPort());
+           url.append(request.getContextPath()).append("/cas-login");
+           log.info("CAS server and service:  " + authServer);
+           //System.out.println(url);
+
+           // Redirect to CAS server
+           return response.encodeRedirectURL(url.toString());
+       } else {
+           return null;
+       }
     }
 
     /*
