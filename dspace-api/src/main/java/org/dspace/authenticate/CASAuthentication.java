@@ -76,8 +76,7 @@ public class CASAuthentication
                                    String username)
         throws SQLException
     {
-        return ConfigurationManager.getBooleanProperty(
-        "authentication-cas", "webui.cas.autoregister");
+        return ConfigurationManager.getBooleanProperty("webui.cas.autoregister");
     }
 
     /**
@@ -152,7 +151,7 @@ public class CASAuthentication
             try
             {
                 // Determine CAS validation URL
-                String validate = ConfigurationManager.getProperty("authentication-cas", "cas.validate.url");
+                String validate = ConfigurationManager.getProperty("cas.validate.url");
                 log.info(LogManager.getHeader(context, "login", "CAS ticket: " + ticket));
                 log.info(LogManager.getHeader(context, "login", "CAS service: " + service));
                 if (validate == null)
@@ -289,7 +288,7 @@ public class CASAuthentication
   public String validate(String service, String ticket, String validateURL)
       throws IOException, ServletException
   {
-      boolean useSaml = ConfigurationManager.getBooleanProperty("authentication-cas", "cas.use.saml", false);
+      boolean useSaml = ConfigurationManager.getBooleanProperty("cas.use.saml", false);
       String netid = null;
       firstName = "University";
       lastName = "User";
@@ -297,7 +296,7 @@ public class CASAuthentication
 
       if (useSaml) {
 
-          String samlValidate = ConfigurationManager.getProperty("authentication-cas", "cas.url.prefix");
+          String samlValidate = ConfigurationManager.getProperty("cas.url.prefix");
           Saml11TicketValidator samltv = new Saml11TicketValidator(samlValidate);
           Assertion assertion = null;
           try {
@@ -382,11 +381,11 @@ public class CASAuthentication
                             HttpServletRequest request,
                             HttpServletResponse response)
     {
-       boolean webuiCasEnable = ConfigurationManager.getBooleanProperty("authentication-cas", "webui.cas.enable", false);
+       boolean webuiCasEnable = ConfigurationManager.getBooleanProperty("webui.cas.enable", false);
        if (webuiCasEnable)
        {
            // Determine CAS server URL
-           final String authServer = ConfigurationManager.getProperty("authentication-cas", "cas.server.url");
+           final String authServer = ConfigurationManager.getProperty("cas.server.url");
            StringBuffer url=new StringBuffer(authServer);
            url.append("?service=").append(request.getScheme()).
            append("://").append(request.getServerName());
