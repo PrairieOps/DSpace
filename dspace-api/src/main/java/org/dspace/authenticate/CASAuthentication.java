@@ -9,6 +9,7 @@ package org.dspace.authenticate;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.servlet.ServletException;
@@ -18,6 +19,8 @@ import javax.servlet.http.HttpSession;
 
 import org.apache.log4j.Logger;
 import org.apache.commons.collections.ListUtils;
+import org.dspace.authenticate.factory.AuthenticateServiceFactory;
+import org.dspace.authenticate.service.AuthenticationService;
 import org.dspace.core.ConfigurationManager;
 import org.dspace.core.Context;
 import org.dspace.core.LogManager;
@@ -25,14 +28,12 @@ import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
-import org.dspace.authenticate.factory.AuthenticateServiceFactory;
-import org.dspace.authenticate.service.AuthenticationService;
 
 // we use the Java CAS client
-import edu.yale.its.tp.cas.client.*;
-import java.util.ArrayList;
+import org.jasig.cas.client.authentication.AttributePrincipal;
 import org.jasig.cas.client.validation.Assertion;
-import org.jasig.cas.client.validation.Saml11TicketValidator;
+import org.jasig.cas.client.validation.Cas30ServiceTicketValidator;
+import org.jasig.cas.client.validation.TicketValidationException;
 
 /**
  * Authenticator for Central Authentication Service (CAS).
@@ -57,11 +58,9 @@ public class CASAuthentication
     private static final AuthenticationService authenticationService = AuthenticateServiceFactory.getInstance().getAuthenticationService();
     private static final EPersonService ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
 
-    private static String casProxyvalidate;   //URL to validate PT tickets
-
-    // (optional) store user's details for self registration, can get this info from LDAP, RDBMS etc
-    private String firstName = "University";
-    private String lastName = "User";
+    // user details for self registration
+    private String firstName = null;
+    private String lastName = null;
     private String email = null;
 
     /**
@@ -141,30 +140,19 @@ public class CASAuthentication
                             HttpServletRequest request)
         throws SQLException
     {
-        final String ticket = request.getParameter("ticket");
+        final String ticket = request.getParameter("ticket").toString();
         final String service = request.getRequestURL().toString();
-        log.info(LogManager.getHeader(context, "login", " ticket: " + ticket));
-        log.info(LogManager.getHeader(context, "login", "service: " + service));
 
-        if (ticket != null)
+        if (ticket != null && service != null)
         {
             try
             {
-                // Determine CAS validation URL
-                String validate = ConfigurationManager.getProperty("cas.validate.url");
-                log.info(LogManager.getHeader(context, "login", "CAS ticket: " + ticket));
-                log.info(LogManager.getHeader(context, "login", "CAS service: " + service));
-                if (validate == null)
-                {
-                    throw new ServletException("No CAS validation URL specified. You need to set property 'cas.validate.url'");
-                }
-
                 // Validate ticket (it is assumed that CAS validator returns the user network ID)
-                netid = validate(service, ticket, validate);
-                if (netid == null)
-                {
-                    throw new ServletException("Ticket '" + ticket + "' is not valid");
-                }
+                final String casUrlPrefix = ConfigurationManager.getProperty("cas.url.prefix");
+                Cas30ServiceTicketValidator stv = new Cas30ServiceTicketValidator(casUrlPrefix);
+                Assertion assertion = stv.validate(ticket, service);
+                AttributePrincipal principal = assertion.getPrincipal();
+                netid = principal.getName();
 
                 // Locate the eperson in DSpace
                 EPerson eperson = null;
@@ -175,7 +163,17 @@ public class CASAuthentication
                 catch (SQLException e)
                 {
                   log.error("cas findbynetid failed");
-                  log.error(e.getStackTrace());
+                  StackTraceElement[] stackTrace = e.getStackTrace();
+                  StringBuilder stack = new StringBuilder();
+                  int numLines = Math.min(stackTrace.length, 12);
+                  for (int j = 0; j < numLines; j++) {
+                      stack.append("\t" + stackTrace[j].toString() + "\n");
+                  }
+                  if (stackTrace.length > numLines) {
+                      stack.append("\t. . .\n");
+                  }
+
+                  log.error(e.toString() + " -> \n" + stack.toString());
                 }
 
                 // if they entered a netd that matches an eperson and they are allowed to login
@@ -202,36 +200,27 @@ public class CASAuthentication
 
                     return SUCCESS;
                 }
-
                 // the user does not exist in DSpace so create an eperson
                 else
                 {
                   if (canSelfRegister(context, request, netid) )
                     {
-                        //org.jasig.cas.client.validation.Saml11TicketValidationFilter filter;
                         // TEMPORARILY turn off authorisation
-                        // Register the new user automatically
-                        //context.setIgnoreAuthorization(true);
                         context.turnOffAuthorisationSystem();
-                        
+
                         eperson = ePersonService.create(context);
 
                         // use netid only but this implies that user has to manually update their profile
                         eperson.setNetid(netid);
 
                         // if you wish to automatically extract further user details: email, first_name and last_name
-                        //  enter your method here: e.g. query LDAP or RDBMS etc.
-                        /* e.g.
-                        registerUser(netid);
-                        eperson.setEmail(email);*/
-
                         eperson.setFirstName(context, firstName);
                         eperson.setLastName(context, lastName);
-                        
+
                         if (email == null) {
                             email = netid;
                         }
-                        
+
                         String lang = ConfigurationManager.getProperty("default.locale");
                         eperson.setLanguage(context, lang);
                         eperson.setEmail(email);
@@ -243,7 +232,6 @@ public class CASAuthentication
                         ePersonService.update(context, eperson);
                         context.commit();
                         context.dispatchEvents();
-                        //context.setIgnoreAuthorization(false);
                         context.restoreAuthSystemState();
                         context.setCurrentUser(eperson);
                         log.warn(LogManager.getHeader(context, "authenticate",
@@ -258,109 +246,24 @@ public class CASAuthentication
                         return NO_SUCH_USER;
                     }
                 }
-
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
-                log.error(e.getStackTrace()[0]);
-                //throw new ServletException(e);
+                StackTraceElement[] stackTrace = e.getStackTrace();
+                StringBuilder stack = new StringBuilder();
+                int numLines = Math.min(stackTrace.length, 12);
+                for (int j = 0; j < numLines; j++) {
+                    stack.append("\t" + stackTrace[j].toString() + "\n");
+                }
+                if (stackTrace.length > numLines) {
+                    stack.append("\t. . .\n");
+                }
+
+                log.error(e.toString() + " -> \n" + stack.toString());
             }
         }
         return BAD_ARGS;
     }
-
-
-  /**
-   * Returns the NetID of the owner of the given ticket, or null if the
-   * ticket isn't valid.
-   *
-   * @param service the service ID for the application validating the
-   *                ticket
-   * @param ticket  the opaque service ticket (ST) to validate
-   * 
-   * @param validateURL the validation service URL
-   * 
-   * @return netid of eperson
-   * 
-   * @throws java.io.IOException
-   * 
-   * @throws javax.servlet.ServletException
-   */
-  public String validate(String service, String ticket, String validateURL)
-      throws IOException, ServletException
-  {
-      boolean useSaml = ConfigurationManager.getBooleanProperty("cas.use.saml", false);
-      String netid = null;
-      firstName = "University";
-      lastName = "User";
-      email = null;
-
-      if (useSaml) {
-
-          String samlValidate = ConfigurationManager.getProperty("cas.url.prefix");
-          Saml11TicketValidator samltv = new Saml11TicketValidator(samlValidate);
-          Assertion assertion = null;
-          try {
-              assertion = samltv.validate(ticket, service);
-          } catch (Exception e) {
-              log.error("Unexpected exception caught", e);
-              throw new ServletException(e);
-          }
-          firstName = (String) assertion.getPrincipal().getAttributes().get("firstName");
-          lastName = (String) assertion.getPrincipal().getAttributes().get("lastName");
-          Object emails = assertion.getPrincipal().getAttributes().get("mail");
-          if(emails instanceof ArrayList) {
-              email = (String)((ArrayList)emails).get(0);
-          } else {
-              email = (String) assertion.getPrincipal().getAttributes().get("mail");
-          }
-          
-          netid = assertion.getPrincipal().getName();
-          
-      } else {
-          ServiceTicketValidator stv = null;
-          String validateUrl = null;
-
-          if (ticket.startsWith("ST")) {
-              stv = new ServiceTicketValidator();
-          } else {
-              // uPortal uses this
-              stv = new ProxyTicketValidator();
-              validateUrl = casProxyvalidate;
-          }
-
-          stv.setCasValidateUrl(validateURL);
-          stv.setService(java.net.URLEncoder.encode(service));
-          stv.setServiceTicket(ticket);
-
-          try {
-              stv.validate();
-          } catch (Exception e) {
-              log.error("Unexpected exception caught", e);
-              throw new ServletException(e);
-          }
-
-          if (!stv.isAuthenticationSuccesful()) {
-              return null;
-          }
-          netid = stv.getUser();
-          log.info("Authenticated user via CAS: " + netid);
-      }
-      return netid;
-  }
-
-
-    /**
-    * Add code here to extract user details
-    * email, firstname, lastname
-    * from LDAP or database etc
-    */
-
-   public void registerUser(String netid)
-                          throws ClassNotFoundException, SQLException
-    {
-                // add your code here
-    }
-
 
     /*
      * Returns URL to which to redirect to obtain credentials (either password
@@ -381,26 +284,21 @@ public class CASAuthentication
                             HttpServletRequest request,
                             HttpServletResponse response)
     {
-       boolean webuiCasEnable = ConfigurationManager.getBooleanProperty("webui.cas.enable", false);
-       if (webuiCasEnable)
-       {
-           // Determine CAS server URL
-           final String authServer = ConfigurationManager.getProperty("cas.server.url");
-           StringBuffer url=new StringBuffer(authServer);
-           url.append("?service=").append(request.getScheme()).
-           append("://").append(request.getServerName());
-           //Add the URL callback
-           if(request.getServerPort()!=80)
-             url.append(":").append(request.getServerPort());
-           url.append(request.getContextPath()).append("/cas-login");
-           log.info("CAS server and service:  " + authServer);
-           //System.out.println(url);
+       // Determine CAS server URL
+       final String casUrlPrefix = ConfigurationManager.getProperty("cas.url.prefix");
+       StringBuffer url=new StringBuffer(casUrlPrefix);
+       // Add the login path
+       url.append("/login");
+       // Add the URL callback
+       url.append("?service=").append(request.getScheme()).
+       append("://").append(request.getServerName());
+       if (request.getServerPort()!=80 || request.getServerPort()!=443)
+         url.append(":").append(request.getServerPort());
+       url.append(request.getContextPath()).append("/cas-login");
+       log.info("CAS server and service:  " + casUrlPrefix);
 
-           // Redirect to CAS server
-           return response.encodeRedirectURL(url.toString());
-       } else {
-           return null;
-       }
+       // Redirect to CAS server
+       return response.encodeRedirectURL(url.toString());
     }
 
     /*
