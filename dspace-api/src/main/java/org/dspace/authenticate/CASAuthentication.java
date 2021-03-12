@@ -2,7 +2,7 @@
  * The contents of this file are subject to the license and copyright
  * detailed in the LICENSE and NOTICE files at the root of the source
  * tree and available online at
- *
+ * <p>
  * http://www.dspace.org/license/
  */
 package org.dspace.authenticate;
@@ -50,7 +50,7 @@ import org.jasig.cas.client.validation.TicketValidationException;
  */
 
 public class CASAuthentication
-    implements AuthenticationMethod {
+        implements AuthenticationMethod {
 
     /** log4j category */
     private static Logger log = Logger.getLogger(CASAuthentication.class);
@@ -73,8 +73,7 @@ public class CASAuthentication
     public boolean canSelfRegister(Context context,
                                    HttpServletRequest request,
                                    String username)
-        throws SQLException
-    {
+            throws SQLException {
         return ConfigurationManager.getBooleanProperty("webui.cas.autoregister");
     }
 
@@ -83,9 +82,8 @@ public class CASAuthentication
      */
     @Override
     public void initEPerson(Context context, HttpServletRequest request,
-            EPerson eperson)
-        throws SQLException
-    {
+                            EPerson eperson)
+            throws SQLException {
     }
 
     /**
@@ -95,25 +93,23 @@ public class CASAuthentication
     public boolean allowSetPassword(Context context,
                                     HttpServletRequest request,
                                     String username)
-        throws SQLException
-    {
+            throws SQLException {
         return false;
     }
 
     /**
-     * 
+     *
      * Predicate, is this an implicit authentication method.
      * An implicit method gets credentials from the environment (such as
      * an HTTP request or even Java system properties) rather than the
      * explicit username and password.  For example, a method that reads
      * the X.509 certificates in an HTTPS request is implicit.
      * @return true if this method uses implicit authentication.
-     * 
+     *
      * Returns true, CAS is an implicit method
      */
     @Override
-    public boolean isImplicit()
-    {
+    public boolean isImplicit() {
         return true;
     }
 
@@ -121,8 +117,7 @@ public class CASAuthentication
      * No special groups.
      */
     @Override
-    public List<Group> getSpecialGroups(Context context, HttpServletRequest request)
-    {
+    public List<Group> getSpecialGroups(Context context, HttpServletRequest request) {
         return ListUtils.EMPTY_LIST;
     }
 
@@ -138,15 +133,12 @@ public class CASAuthentication
                             String password,
                             String realm,
                             HttpServletRequest request)
-        throws SQLException
-    {
+            throws SQLException {
         final String ticket = request.getParameter("ticket").toString();
         final String service = request.getRequestURL().toString();
 
-        if (ticket != null && service != null)
-        {
-            try
-            {
+        if (ticket != null && service != null) {
+            try {
                 // Validate ticket (it is assumed that CAS validator returns the user network ID)
                 final String casUrlPrefix = ConfigurationManager.getProperty("cas.url.prefix");
                 Cas30ServiceTicketValidator stv = new Cas30ServiceTicketValidator(casUrlPrefix);
@@ -154,56 +146,47 @@ public class CASAuthentication
                 AttributePrincipal principal = assertion.getPrincipal();
                 netid = principal.getName();
 
-                try
-                {
+                try {
                     firstName = principal.getAttributes().get(ConfigurationManager.getProperty("cas.attr.firstName")).toString();
                     lastName = principal.getAttributes().get(ConfigurationManager.getProperty("cas.attr.lastName")).toString();
                     email = principal.getAttributes().get(ConfigurationManager.getProperty("cas.attr.mail")).toString();
-                }
-                catch (Exception e)
-                {
+                } catch (Exception e) {
                     // silently pass if we can't get the attributes.
                 }
 
                 // Locate the eperson in DSpace
                 EPerson eperson = null;
-                try
-                {
+                try {
                     eperson = ePersonService.findByNetid(context, netid.toLowerCase());
-                }
-                catch (SQLException e)
-                {
-                  log.error("cas findbynetid failed");
-                  StackTraceElement[] stackTrace = e.getStackTrace();
-                  StringBuilder stack = new StringBuilder();
-                  int numLines = Math.min(stackTrace.length, 12);
-                  for (int j = 0; j < numLines; j++) {
-                      stack.append("\t" + stackTrace[j].toString() + "\n");
-                  }
-                  if (stackTrace.length > numLines) {
-                      stack.append("\t. . .\n");
-                  }
+                } catch (SQLException e) {
+                    log.error("cas findbynetid failed");
+                    StackTraceElement[] stackTrace = e.getStackTrace();
+                    StringBuilder stack = new StringBuilder();
+                    int numLines = Math.min(stackTrace.length, 12);
+                    for (int j = 0; j < numLines; j++) {
+                        stack.append("\t" + stackTrace[j].toString() + "\n");
+                    }
+                    if (stackTrace.length > numLines) {
+                        stack.append("\t. . .\n");
+                    }
 
-                  log.error(e.toString() + " -> \n" + stack.toString());
+                    log.error(e.toString() + " -> \n" + stack.toString());
                 }
 
                 // if they entered a netd that matches an eperson and they are allowed to login
-                if (eperson != null)
-                {
-                  // e-mail address corresponds to active account
-                    if (eperson.getRequireCertificate())
-                    {
+                if (eperson != null) {
+                    // e-mail address corresponds to active account
+                    if (eperson.getRequireCertificate()) {
                         // they must use a certificate
                         return CERT_REQUIRED;
-                    }
-                    else if (!eperson.canLogIn()) {
+                    } else if (!eperson.canLogIn()) {
                         return BAD_ARGS;
                     }
 
                     // Logged in OK.
                     HttpSession session = request.getSession(false);
-                    if (session!=null) {
-                      session.setAttribute("loginType", "CAS");
+                    if (session != null) {
+                        session.setAttribute("loginType", "CAS");
                     }
 
                     context.setCurrentUser(eperson);
@@ -212,10 +195,8 @@ public class CASAuthentication
                     return SUCCESS;
                 }
                 // the user does not exist in DSpace so create an eperson
-                else
-                {
-                  if (canSelfRegister(context, request, netid) )
-                    {
+                else {
+                    if (canSelfRegister(context, request, netid)) {
                         // TEMPORARILY turn off authorisation
                         context.turnOffAuthorisationSystem();
 
@@ -246,20 +227,16 @@ public class CASAuthentication
                         context.restoreAuthSystemState();
                         context.setCurrentUser(eperson);
                         log.warn(LogManager.getHeader(context, "authenticate",
-                            netid + "  type=CAS auto-register"));
+                                netid + "  type=CAS auto-register"));
                         return SUCCESS;
-                    }
-                    else
-                    {
+                    } else {
                         // No auto-registration for valid netid
                         log.warn(LogManager.getHeader(context, "authenticate",
-                            netid + "  type=netid_but_no_record, cannot auto-register"));
+                                netid + "  type=netid_but_no_record, cannot auto-register"));
                         return NO_SUCH_USER;
                     }
                 }
-            }
-            catch (Exception e)
-            {
+            } catch (Exception e) {
                 StackTraceElement[] stackTrace = e.getStackTrace();
                 StringBuilder stack = new StringBuilder();
                 int numLines = Math.min(stackTrace.length, 12);
@@ -292,24 +269,23 @@ public class CASAuthentication
      * @return fully-qualified URL
      */
     public String loginPageURL(Context context,
-                            HttpServletRequest request,
-                            HttpServletResponse response)
-    {
-       // Determine CAS server URL
-       final String casUrlPrefix = ConfigurationManager.getProperty("cas.url.prefix");
-       StringBuffer url=new StringBuffer(casUrlPrefix);
-       // Add the login path
-       url.append("/login");
-       // Add the URL callback
-       url.append("?service=").append(request.getScheme()).
-       append("://").append(request.getServerName());
-       if (request.getServerPort()!=80 || request.getServerPort()!=443)
-         url.append(":").append(request.getServerPort());
-       url.append(request.getContextPath()).append("/cas-login");
-       log.info("CAS server and service:  " + casUrlPrefix);
+                               HttpServletRequest request,
+                               HttpServletResponse response) {
+        // Determine CAS server URL
+        final String casUrlPrefix = ConfigurationManager.getProperty("cas.url.prefix");
+        StringBuffer url = new StringBuffer(casUrlPrefix);
+        // Add the login path
+        url.append("/login");
+        // Add the URL callback
+        url.append("?service=").append(request.getScheme()).
+                append("://").append(request.getServerName());
+        if (request.getServerPort() != 80 || request.getServerPort() != 443)
+            url.append(":").append(request.getServerPort());
+        url.append(request.getContextPath()).append("/cas-login");
+        log.info("CAS server and service:  " + casUrlPrefix);
 
-       // Redirect to CAS server
-       return response.encodeRedirectURL(url.toString());
+        // Redirect to CAS server
+        return response.encodeRedirectURL(url.toString());
     }
 
     /*
@@ -321,8 +297,7 @@ public class CASAuthentication
      *
      * @return Message key to look up in i18n message catalog.
      */
-    public String loginPageTitle(Context context)
-    {
+    public String loginPageTitle(Context context) {
         //return null;
         return "org.dspace.eperson.CASAuthentication.title";
     }
