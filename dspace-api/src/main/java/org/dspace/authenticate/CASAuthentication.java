@@ -154,6 +154,17 @@ public class CASAuthentication
                 AttributePrincipal principal = assertion.getPrincipal();
                 netid = principal.getName();
 
+                try
+                {
+                    firstName = principal.getAttributes().get(ConfigurationManager.getProperty("cas.attr.firstName")).toString();
+                    lastName = principal.getAttributes().get(ConfigurationManager.getProperty("cas.attr.lastName")).toString();
+                    email = principal.getAttributes().get(ConfigurationManager.getProperty("cas.attr.mail")).toString();
+                }
+                catch (Exception e)
+                {
+                    // silently pass if we can't get the attributes.
+                }
+
                 // Locate the eperson in DSpace
                 EPerson eperson = null;
                 try
